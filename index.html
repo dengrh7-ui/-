@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>计时器</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <h1 class="app-title">计时器</h1>
+
+    <!-- Mode Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-mode="countdown">倒计时</button>
+      <button class="tab" data-mode="stopwatch">秒表</button>
+    </div>
+
+    <!-- Ring Display -->
+    <div class="ring-container">
+      <svg class="progress-ring" viewBox="0 0 220 220">
+        <circle class="ring-bg" cx="110" cy="110" r="95"/>
+        <circle class="ring-fill" cx="110" cy="110" r="95" id="ringFill"/>
+      </svg>
+      <div class="time-display" id="timeDisplay">00:00</div>
+      <div class="lap-badge" id="lapBadge"></div>
+    </div>
+
+    <!-- Countdown Input -->
+    <div class="input-section" id="countdownInput">
+      <div class="time-inputs">
+        <div class="input-group">
+          <button class="spin-btn" data-target="hours" data-dir="up">▲</button>
+          <input type="number" id="inputHours" min="0" max="23" value="0" placeholder="时">
+          <button class="spin-btn" data-target="hours" data-dir="down">▼</button>
+          <span class="input-label">时</span>
+        </div>
+        <span class="sep">:</span>
+        <div class="input-group">
+          <button class="spin-btn" data-target="minutes" data-dir="up">▲</button>
+          <input type="number" id="inputMinutes" min="0" max="59" value="5" placeholder="分">
+          <button class="spin-btn" data-target="minutes" data-dir="down">▼</button>
+          <span class="input-label">分</span>
+        </div>
+        <span class="sep">:</span>
+        <div class="input-group">
+          <button class="spin-btn" data-target="seconds" data-dir="up">▲</button>
+          <input type="number" id="inputSeconds" min="0" max="59" value="0" placeholder="秒">
+          <button class="spin-btn" data-target="seconds" data-dir="down">▼</button>
+          <span class="input-label">秒</span>
+        </div>
+      </div>
+      <!-- Presets -->
+      <div class="presets">
+        <button class="preset-btn" data-seconds="60">1分</button>
+        <button class="preset-btn" data-seconds="180">3分</button>
+        <button class="preset-btn" data-seconds="300">5分</button>
+        <button class="preset-btn" data-seconds="600">10分</button>
+        <button class="preset-btn" data-seconds="1500">25分</button>
+        <button class="preset-btn" data-seconds="3600">1时</button>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button class="ctrl-btn secondary" id="resetBtn">重置</button>
+      <button class="ctrl-btn primary" id="startBtn">开始</button>
+      <button class="ctrl-btn secondary" id="lapBtn" style="display:none">计次</button>
+    </div>
+
+    <!-- Laps List (stopwatch) -->
+    <div class="laps-container" id="lapsContainer" style="display:none">
+      <div class="laps-header">
+        <span>计次</span>
+        <span>单圈</span>
+        <span>总计</span>
+      </div>
+      <ul class="laps-list" id="lapsList"></ul>
+    </div>
+
+    <!-- Finish overlay -->
+    <div class="finish-overlay" id="finishOverlay" style="display:none">
+      <div class="finish-card">
+        <div class="finish-icon">✓</div>
+        <p>时间到！</p>
+        <button class="ctrl-btn primary" id="dismissBtn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
