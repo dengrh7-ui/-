@@ -1,338 +1,469 @@
 'use strict';
 
-// ── Constants ──────────────────────────────────────────────────────────────
-const CIRCUMFERENCE = 2 * Math.PI * 95; // ~596.9
-
-// ── State ──────────────────────────────────────────────────────────────────
-const state = {
-  mode: 'countdown',   // 'countdown' | 'stopwatch'
-  running: false,
-  intervalId: null,
-
-  // countdown
-  totalSeconds: 0,
-  remainingSeconds: 0,
-
-  // stopwatch
-  elapsedMs: 0,
-  lapStartMs: 0,
-  startTimestamp: 0,  // performance.now() anchor
-  laps: [],
+// ── Category config ─────────────────────────────────────────────────────────
+const CAT = {
+  '食':     { icon: '🍜', color: '#ff9f43', label: '餐饮' },
+  '衣':     { icon: '👕', color: '#ff6b9d', label: '服饰' },
+  '住':     { icon: '🏠', color: '#4facfe', label: '住房' },
+  '行':     { icon: '🚗', color: '#43e97b', label: '出行' },
+  '娱':     { icon: '🎮', color: '#a29bfe', label: '娱乐' },
+  '医':     { icon: '💊', color: '#fd7272', label: '医疗' },
+  '教育':   { icon: '📚', color: '#0abde3', label: '教育' },
+  '其他':   { icon: '📦', color: '#636e72', label: '其他' },
+  '工资':   { icon: '💼', color: '#55efc4', label: '工资' },
+  '兼职':   { icon: '💻', color: '#00cec9', label: '兼职' },
+  '投资':   { icon: '📈', color: '#6c5ce7', label: '投资' },
+  '红包':   { icon: '🧧', color: '#e17055', label: '红包' },
+  '转账':   { icon: '🔄', color: '#74b9ff', label: '转账' },
+  '报销':   { icon: '🧾', color: '#81ecec', label: '报销' },
+  '理财':   { icon: '💹', color: '#fdcb6e', label: '理财' },
+  '其他收入': { icon: '💰', color: '#ffeaa7', label: '其他收入' },
 };
 
-// ── DOM refs ───────────────────────────────────────────────────────────────
+function catInfo(key) {
+  return CAT[key] || { icon: '📦', color: '#636e72', label: key };
+}
+
+// ── Storage ─────────────────────────────────────────────────────────────────
+const STORE_KEY = 'ledger_v1';
+
+let records = [];
+try { records = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); } catch { records = []; }
+
+function save() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(records));
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+const S = {
+  page: 'pageRecords',
+  year: new Date().getFullYear(),
+  month: new Date().getMonth(),   // 0-indexed
+  filterCat: 'all',
+  addType: 'expense',
+  addCat: null,
+  amtStr: '0',
+  delId: null,
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const timeDisplay    = $('timeDisplay');
-const ringFill       = $('ringFill');
-const lapBadge       = $('lapBadge');
-const startBtn       = $('startBtn');
-const resetBtn       = $('resetBtn');
-const lapBtn         = $('lapBtn');
-const countdownInput = $('countdownInput');
-const inputHours     = $('inputHours');
-const inputMinutes   = $('inputMinutes');
-const inputSeconds   = $('inputSeconds');
-const finishOverlay  = $('finishOverlay');
-const lapsContainer  = $('lapsContainer');
-const lapsList       = $('lapsList');
 
-// ── Audio ──────────────────────────────────────────────────────────────────
-const ctx = window.AudioContext ? new AudioContext() : null;
-
-function beep(freq = 880, dur = 0.18, type = 'sine') {
-  if (!ctx) return;
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.connect(g); g.connect(ctx.destination);
-  o.type = type; o.frequency.value = freq;
-  g.gain.setValueAtTime(0.3, ctx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-  o.start(); o.stop(ctx.currentTime + dur);
+function fmt(n) {
+  return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function playFinish() {
-  if (!ctx) return;
-  [0, 0.18, 0.36].forEach((t, i) =>
-    setTimeout(() => beep([660, 784, 1047][i], 0.22, 'triangle'), t * 1000));
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
 }
 
-function playTick() { beep(1200, 0.06, 'square'); }
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
-
-function formatSeconds(s) {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+function monthRecords() {
+  return records.filter(r => {
+    const d = new Date(r.date + 'T00:00:00');
+    return d.getFullYear() === S.year && d.getMonth() === S.month;
+  });
 }
 
-function formatMs(ms) {
-  const total = Math.floor(ms / 10);
-  const cs = total % 100;
-  const s  = Math.floor(total / 100) % 60;
-  const m  = Math.floor(total / 6000) % 60;
-  const h  = Math.floor(total / 360000);
-  if (h > 0) return `${pad(h)}:${pad(m)}:${pad(s)}.${pad(cs)}`;
-  return `${pad(m)}:${pad(s)}.${pad(cs)}`;
+function weekdayStr(dateStr) {
+  const days = ['日', '一', '二', '三', '四', '五', '六'];
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${d.getMonth() + 1}/${d.getDate()} 周${days[d.getDay()]}`;
 }
 
-function setRing(fraction, cls = '') {
-  const offset = CIRCUMFERENCE * (1 - Math.max(0, Math.min(1, fraction)));
-  ringFill.style.strokeDashoffset = offset;
-  ringFill.className = 'ring-fill' + (cls ? ' ' + cls : '');
+// ── Toast ────────────────────────────────────────────────────────────────────
+let toastTmr = null;
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('on');
+  clearTimeout(toastTmr);
+  toastTmr = setTimeout(() => el.classList.remove('on'), 2000);
 }
 
-function setTimeClass(cls) {
-  timeDisplay.className = 'time-display' + (cls ? ' ' + cls : '');
+// ── Header ───────────────────────────────────────────────────────────────────
+function renderHeader() {
+  $('monthLabel').textContent = `${S.year}年${S.month + 1}月`;
+  const mr = monthRecords();
+  const exp = mr.filter(r => r.type === 'expense').reduce((s, r) => s + r.amount, 0);
+  const inc = mr.filter(r => r.type === 'income').reduce((s, r) => s + r.amount, 0);
+  const bal = inc - exp;
+  $('headerExpense').textContent = `¥${fmt(exp)}`;
+  $('headerIncome').textContent = `¥${fmt(inc)}`;
+  const b = $('headerBalance');
+  b.textContent = `¥${fmt(Math.abs(bal))}`;
+  b.className = `summary-val ${bal >= 0 ? 'income' : 'expense'}`;
 }
 
-// ── Countdown logic ────────────────────────────────────────────────────────
-function cdTick() {
-  state.remainingSeconds--;
-  renderCountdown();
-  if (state.remainingSeconds <= 0) finishCountdown();
-  else if (state.remainingSeconds <= 3) playTick();
-}
+// ── Records page ─────────────────────────────────────────────────────────────
+function renderRecords() {
+  let mr = monthRecords();
+  if (S.filterCat !== 'all') mr = mr.filter(r => r.category === S.filterCat);
+  mr.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 
-function renderCountdown() {
-  const rem  = state.remainingSeconds;
-  const tot  = state.totalSeconds;
-  const frac = tot > 0 ? rem / tot : 0;
-  timeDisplay.textContent = formatSeconds(rem);
+  const list = $('recordsList');
+  const empty = $('emptyState');
 
-  let ringCls = '', timeCls = '';
-  if (frac <= 0.1 || rem <= 5) { ringCls = 'danger'; timeCls = 'danger'; }
-  else if (frac <= 0.25)       { ringCls = 'warning'; timeCls = 'warning'; }
-  setRing(frac, ringCls);
-  setTimeClass(timeCls);
-}
-
-function finishCountdown() {
-  clearInterval(state.intervalId);
-  state.running = false;
-  state.remainingSeconds = 0;
-  renderCountdown();
-  setRing(0, 'done');
-  setTimeClass('');
-  timeDisplay.textContent = '00:00';
-  playFinish();
-  finishOverlay.style.display = 'flex';
-  startBtn.textContent = '开始';
-  startBtn.classList.remove('running');
-}
-
-// ── Stopwatch logic ────────────────────────────────────────────────────────
-let rafId = null;
-
-function swFrame() {
-  const now = performance.now();
-  state.elapsedMs = state.elapsedMs + (now - state.startTimestamp);
-  state.startTimestamp = now;
-  renderStopwatch();
-  if (state.running) rafId = requestAnimationFrame(swFrame);
-}
-
-function renderStopwatch() {
-  timeDisplay.textContent = formatMs(state.elapsedMs);
-  setRing(1, ''); // ring stays full for stopwatch
-}
-
-function recordLap() {
-  const lapMs = state.elapsedMs - state.lapStartMs;
-  state.laps.unshift({ total: state.elapsedMs, lap: lapMs });
-  state.lapStartMs = state.elapsedMs;
-  renderLaps();
-
-  lapBadge.textContent = `第 ${state.laps.length} 圈`;
-  lapBadge.classList.add('visible');
-}
-
-function renderLaps() {
-  if (state.laps.length === 0) {
-    lapsContainer.style.display = 'none';
+  if (!mr.length) {
+    list.innerHTML = '';
+    empty.style.display = 'flex';
     return;
   }
-  lapsContainer.style.display = 'block';
+  empty.style.display = 'none';
 
-  const times = state.laps.map(l => l.lap);
-  const fastest = Math.min(...times);
-  const slowest = times.length > 1 ? Math.max(...times) : Infinity;
+  const groups = {};
+  mr.forEach(r => { (groups[r.date] = groups[r.date] || []).push(r); });
 
-  lapsList.innerHTML = state.laps.map((l, i) => {
-    const num = state.laps.length - i;
-    const cls = l.lap === fastest ? 'fastest' : l.lap === slowest ? 'slowest' : '';
-    return `<li class="lap-item ${cls}">
-      <span class="lap-num">${pad(num)}</span>
-      <span>${formatMs(l.lap)}</span>
-      <span>${formatMs(l.total)}</span>
-    </li>`;
+  list.innerHTML = Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(date => {
+    const items = groups[date];
+    const dayExp = items.filter(r => r.type === 'expense').reduce((s, r) => s + r.amount, 0);
+    const dayInc = items.filter(r => r.type === 'income').reduce((s, r) => s + r.amount, 0);
+    const parts = [];
+    if (dayExp > 0) parts.push(`支出¥${fmt(dayExp)}`);
+    if (dayInc > 0) parts.push(`收入¥${fmt(dayInc)}`);
+
+    const rows = items.map(r => {
+      const c = catInfo(r.category);
+      return `
+        <div class="record-item" data-id="${r.id}">
+          <div class="r-icon" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
+          <div class="r-body">
+            <div class="r-cat">${c.label}</div>
+            ${r.note ? `<div class="r-note">${r.note}</div>` : ''}
+          </div>
+          <div class="r-amt ${r.type}">${r.type === 'expense' ? '-' : '+'}¥${fmt(r.amount)}</div>
+          <button class="r-del" data-id="${r.id}" title="删除">×</button>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="day-group">
+        <div class="day-header">
+          <span class="day-date">${weekdayStr(date)}</span>
+          <span class="day-total">${parts.join('  ')}</span>
+        </div>
+        ${rows}
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.r-del').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      S.delId = Number(btn.dataset.id);
+      $('delOverlay').classList.add('show');
+    });
+  });
+}
+
+// ── Stats page ────────────────────────────────────────────────────────────────
+function renderStats() {
+  const mr = monthRecords();
+  const exp = mr.filter(r => r.type === 'expense').reduce((s, r) => s + r.amount, 0);
+  const inc = mr.filter(r => r.type === 'income').reduce((s, r) => s + r.amount, 0);
+  const bal = inc - exp;
+
+  $('stExp').textContent = `¥${fmt(exp)}`;
+  $('stInc').textContent = `¥${fmt(inc)}`;
+  const bEl = $('stBal');
+  bEl.textContent = `¥${fmt(Math.abs(bal))}`;
+  bEl.className = `sc-val ${bal >= 0 ? 'income' : 'expense'}`;
+
+  renderPie(mr);
+  renderBreakdown(mr);
+  renderTrend(mr);
+}
+
+function renderPie(mr) {
+  const expRecs = mr.filter(r => r.type === 'expense');
+  const total = expRecs.reduce((s, r) => s + r.amount, 0);
+  const svg = $('pieSvg');
+  const leg = $('pieLegend');
+
+  if (!total) {
+    svg.innerHTML = `<text x="100" y="108" text-anchor="middle" fill="#555" font-size="13">暂无支出</text>`;
+    leg.innerHTML = '';
+    return;
+  }
+
+  const catTotals = {};
+  expRecs.forEach(r => { catTotals[r.category] = (catTotals[r.category] || 0) + r.amount; });
+  const sorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+
+  let angle = -Math.PI / 2;
+  const cx = 100, cy = 100, ro = 78, ri = 48;
+
+  const paths = sorted.map(([cat, amt]) => {
+    const c = catInfo(cat);
+    const span = (amt / total) * 2 * Math.PI;
+    const end = angle + span;
+    const x1 = cx + ro * Math.cos(angle), y1 = cy + ro * Math.sin(angle);
+    const x2 = cx + ro * Math.cos(end),   y2 = cy + ro * Math.sin(end);
+    const ix1 = cx + ri * Math.cos(end),  iy1 = cy + ri * Math.sin(end);
+    const ix2 = cx + ri * Math.cos(angle),iy2 = cy + ri * Math.sin(angle);
+    const large = span > Math.PI ? 1 : 0;
+    const d = `M${x1},${y1} A${ro},${ro},0,${large},1,${x2},${y2} L${ix1},${iy1} A${ri},${ri},0,${large},0,${ix2},${iy2} Z`;
+    angle = end;
+    return `<path d="${d}" fill="${c.color}" opacity="0.9"/>`;
+  }).join('');
+
+  const top = sorted[0];
+  const topLabel = catInfo(top[0]).label;
+  const topPct = Math.round(top[1] / total * 100);
+
+  svg.innerHTML = paths + `
+    <text x="100" y="95"  text-anchor="middle" fill="#c8c8e8" font-size="10">${topLabel}</text>
+    <text x="100" y="112" text-anchor="middle" fill="#e4e4f0" font-size="15" font-weight="bold">${topPct}%</text>`;
+
+  leg.innerHTML = sorted.map(([cat, amt]) => {
+    const c = catInfo(cat);
+    const pct = Math.round(amt / total * 100);
+    return `
+      <div class="leg-item">
+        <span class="leg-dot" style="background:${c.color}"></span>
+        <span class="leg-name">${c.icon} ${c.label}</span>
+        <span class="leg-pct">${pct}%</span>
+      </div>`;
   }).join('');
 }
 
-// ── Controls ───────────────────────────────────────────────────────────────
-function getInputSeconds() {
-  const h = parseInt(inputHours.value)   || 0;
-  const m = parseInt(inputMinutes.value) || 0;
-  const s = parseInt(inputSeconds.value) || 0;
-  return h * 3600 + m * 60 + s;
+function renderBreakdown(mr) {
+  const expRecs = mr.filter(r => r.type === 'expense');
+  const total = expRecs.reduce((s, r) => s + r.amount, 0);
+  const el = $('catBreakdown');
+
+  if (!total) {
+    el.innerHTML = '<p class="no-data">暂无支出数据</p>';
+    return;
+  }
+
+  const catTotals = {};
+  expRecs.forEach(r => { catTotals[r.category] = (catTotals[r.category] || 0) + r.amount; });
+  const sorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+
+  el.innerHTML = sorted.map(([cat, amt]) => {
+    const c = catInfo(cat);
+    const pct = (amt / total * 100);
+    return `
+      <div class="bk-item">
+        <div class="bk-top">
+          <div class="bk-left">
+            <span class="bk-icon">${c.icon}</span>
+            <span>${c.label}</span>
+          </div>
+          <div class="bk-right">
+            <span class="bk-amt">¥${fmt(amt)}</span>
+            <span class="bk-pct">${pct.toFixed(1)}%</span>
+          </div>
+        </div>
+        <div class="bk-bar">
+          <div class="bk-fill" style="width:${pct}%;background:${c.color}"></div>
+        </div>
+      </div>`;
+  }).join('');
 }
 
-function startStop() {
-  if (ctx && ctx.state === 'suspended') ctx.resume();
+function renderTrend(mr) {
+  const expRecs = mr.filter(r => r.type === 'expense');
+  const days = new Date(S.year, S.month + 1, 0).getDate();
+  const daily = new Array(days).fill(0);
+  expRecs.forEach(r => {
+    const d = new Date(r.date + 'T00:00:00').getDate();
+    daily[d - 1] += r.amount;
+  });
 
-  if (state.mode === 'countdown') {
-    if (!state.running) {
-      // start
-      if (state.remainingSeconds === 0) {
-        const secs = getInputSeconds();
-        if (secs === 0) return;
-        state.totalSeconds = secs;
-        state.remainingSeconds = secs;
-      }
-      state.running = true;
-      startBtn.textContent = '暂停';
-      startBtn.classList.add('running');
-      countdownInput.style.display = 'none';
-      renderCountdown();
-      state.intervalId = setInterval(cdTick, 1000);
+  const max = Math.max(...daily, 1);
+  const W = 300, H = 70;
+  const bw = W / days - 1;
+
+  const bars = daily.map((amt, i) => {
+    const bh = Math.max((amt / max) * (H - 8), amt > 0 ? 2 : 0);
+    const x = i * (W / days);
+    const y = H - bh;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${amt > 0 ? '#6c63ff' : '#252538'}" rx="2"/>`;
+  }).join('');
+
+  $('trendSvg').innerHTML = bars;
+}
+
+// ── Add form ─────────────────────────────────────────────────────────────────
+function updateAmt() {
+  $('amountDisplay').textContent = S.amtStr || '0';
+}
+
+function handleKey(v) {
+  if (v === 'ok') { doSubmit(); return; }
+
+  if (v === 'del') {
+    S.amtStr = S.amtStr.length > 1 ? S.amtStr.slice(0, -1) : '0';
+  } else if (v === '.') {
+    if (!S.amtStr.includes('.')) S.amtStr += '.';
+  } else if (v === '00') {
+    if (S.amtStr === '0') return;
+    if (S.amtStr.includes('.')) {
+      const dec = S.amtStr.split('.')[1];
+      if (dec.length < 2) S.amtStr += dec.length === 0 ? '00' : '0';
     } else {
-      // pause
-      clearInterval(state.intervalId);
-      state.running = false;
-      startBtn.textContent = '继续';
-      startBtn.classList.remove('running');
+      if (S.amtStr.replace('.', '').length < 8) S.amtStr += '00';
     }
   } else {
-    // stopwatch
-    if (!state.running) {
-      state.running = true;
-      state.startTimestamp = performance.now();
-      startBtn.textContent = '暂停';
-      startBtn.classList.add('running');
-      lapBtn.style.display = 'inline-block';
-      rafId = requestAnimationFrame(swFrame);
-    } else {
-      // pause
-      cancelAnimationFrame(rafId);
-      const now = performance.now();
-      state.elapsedMs += now - state.startTimestamp;
-      state.running = false;
-      startBtn.textContent = '继续';
-      startBtn.classList.remove('running');
-      renderStopwatch();
+    if (S.amtStr.includes('.') && S.amtStr.split('.')[1].length >= 2) return;
+    if (!S.amtStr.includes('.') && S.amtStr.replace('.', '').length >= 8) return;
+    S.amtStr = S.amtStr === '0' ? v : S.amtStr + v;
+  }
+  updateAmt();
+}
+
+function doSubmit() {
+  const amt = parseFloat(S.amtStr);
+  if (!amt || amt <= 0) { toast('请输入金额'); return; }
+  if (!S.addCat) { toast('请选择分类'); return; }
+
+  records.push({
+    id: Date.now(),
+    type: S.addType,
+    category: S.addCat,
+    amount: amt,
+    note: $('noteInput').value.trim(),
+    date: $('dateInput').value || todayStr(),
+  });
+  save();
+
+  S.amtStr = '0';
+  S.addCat = null;
+  $('noteInput').value = '';
+  updateAmt();
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+
+  toast('已记录');
+  switchPage('pageRecords');
+}
+
+// ── Page switch ───────────────────────────────────────────────────────────────
+function switchPage(id) {
+  S.page = id;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  $(id).classList.add('active');
+  document.querySelectorAll('.bnav').forEach(b => b.classList.toggle('active', b.dataset.page === id));
+
+  if (id === 'pageRecords') { renderHeader(); renderRecords(); }
+  if (id === 'pageStats')   { renderStats(); }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+function init() {
+  $('dateInput').value = todayStr();
+
+  renderHeader();
+  renderRecords();
+
+  // Month nav
+  $('prevMonth').addEventListener('click', () => {
+    if (--S.month < 0) { S.month = 11; S.year--; }
+    renderHeader();
+    if (S.page === 'pageRecords') renderRecords();
+    if (S.page === 'pageStats') renderStats();
+  });
+  $('nextMonth').addEventListener('click', () => {
+    const now = new Date();
+    if (S.year === now.getFullYear() && S.month === now.getMonth()) return;
+    if (++S.month > 11) { S.month = 0; S.year++; }
+    renderHeader();
+    if (S.page === 'pageRecords') renderRecords();
+    if (S.page === 'pageStats') renderStats();
+  });
+
+  // Bottom nav
+  document.querySelectorAll('.bnav').forEach(b => {
+    b.addEventListener('click', () => switchPage(b.dataset.page));
+  });
+
+  // Filter bar
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      S.filterCat = b.dataset.cat;
+      document.querySelectorAll('.filter-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      renderRecords();
+    });
+  });
+
+  // Type toggle
+  document.querySelectorAll('.type-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      S.addType = b.dataset.type;
+      S.addCat = null;
+      document.querySelectorAll('.type-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      document.querySelectorAll('.cat-btn').forEach(x => x.classList.remove('active'));
+      $('catExpense').style.display = S.addType === 'expense' ? 'grid' : 'none';
+      $('catIncome').style.display  = S.addType === 'income'  ? 'grid' : 'none';
+    });
+  });
+
+  // Category selection
+  document.querySelectorAll('.cat-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      S.addCat = b.dataset.cat;
+      document.querySelectorAll('.cat-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+
+  // Numpad
+  document.querySelectorAll('.np').forEach(b => {
+    b.addEventListener('click', () => handleKey(b.dataset.v));
+  });
+
+  // Delete modal
+  $('delCancel').addEventListener('click', () => {
+    $('delOverlay').classList.remove('show');
+    S.delId = null;
+  });
+  $('delConfirm').addEventListener('click', () => {
+    if (S.delId) {
+      records = records.filter(r => r.id !== S.delId);
+      save();
+      S.delId = null;
+      $('delOverlay').classList.remove('show');
+      renderHeader();
+      renderRecords();
+      toast('已删除');
     }
-  }
+  });
+
+  // Export
+  $('exportBtn').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
+    a.href = url;
+    a.download = `记账本_${dateStr}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('导出成功');
+  });
+
+  // Import
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!Array.isArray(data)) { toast('格式错误'); return; }
+        records = data;
+        save();
+        renderHeader();
+        if (S.page === 'pageRecords') renderRecords();
+        if (S.page === 'pageStats') renderStats();
+        toast(`已导入 ${data.length} 条`);
+      } catch { toast('解析失败'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
 }
 
-function reset() {
-  if (state.mode === 'countdown') {
-    clearInterval(state.intervalId);
-    state.running = false;
-    state.remainingSeconds = 0;
-    state.totalSeconds = 0;
-    timeDisplay.textContent = '00:00';
-    setRing(1, '');
-    setTimeClass('');
-    startBtn.textContent = '开始';
-    startBtn.classList.remove('running');
-    countdownInput.style.display = 'block';
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-  } else {
-    cancelAnimationFrame(rafId);
-    state.running = false;
-    state.elapsedMs = 0;
-    state.lapStartMs = 0;
-    state.laps = [];
-    timeDisplay.textContent = '00:00.00';
-    setRing(1, '');
-    startBtn.textContent = '开始';
-    startBtn.classList.remove('running');
-    lapBtn.style.display = 'none';
-    lapBadge.classList.remove('visible');
-    renderLaps();
-  }
-}
-
-function switchMode(mode) {
-  if (state.mode === mode) return;
-  reset();
-  state.mode = mode;
-
-  document.querySelectorAll('.tab').forEach(t =>
-    t.classList.toggle('active', t.dataset.mode === mode));
-
-  if (mode === 'countdown') {
-    countdownInput.style.display = 'block';
-    lapsContainer.style.display = 'none';
-    lapBtn.style.display = 'none';
-    lapBadge.classList.remove('visible');
-    timeDisplay.textContent = '00:00';
-  } else {
-    countdownInput.style.display = 'none';
-    timeDisplay.textContent = '00:00.00';
-    setRing(1, '');
-  }
-}
-
-// ── Event listeners ────────────────────────────────────────────────────────
-startBtn.addEventListener('click', startStop);
-resetBtn.addEventListener('click', reset);
-lapBtn.addEventListener('click', recordLap);
-$('dismissBtn').addEventListener('click', () => {
-  finishOverlay.style.display = 'none';
-  reset();
-  countdownInput.style.display = 'block';
-});
-
-document.querySelectorAll('.tab').forEach(btn =>
-  btn.addEventListener('click', () => switchMode(btn.dataset.mode)));
-
-document.querySelectorAll('.preset-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (state.running) return;
-    const secs = parseInt(btn.dataset.seconds);
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    inputHours.value   = h;
-    inputMinutes.value = m;
-    inputSeconds.value = s;
-    state.remainingSeconds = 0;
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    timeDisplay.textContent = formatSeconds(secs);
-    setRing(1, '');
-    setTimeClass('');
-  });
-});
-
-document.querySelectorAll('.spin-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (state.running) return;
-    const target = btn.dataset.target;
-    const dir    = btn.dataset.dir;
-    const inp    = target === 'hours' ? inputHours : target === 'minutes' ? inputMinutes : inputSeconds;
-    const max    = target === 'hours' ? 23 : 59;
-    let val = parseInt(inp.value) || 0;
-    val = dir === 'up' ? Math.min(max, val + 1) : Math.max(0, val - 1);
-    inp.value = val;
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-  });
-});
-
-[inputHours, inputMinutes, inputSeconds].forEach(inp => {
-  inp.addEventListener('change', () => {
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    if (!state.running && state.remainingSeconds === 0) {
-      const secs = getInputSeconds();
-      timeDisplay.textContent = formatSeconds(secs);
-    }
-  });
-});
-
-// ── Init ───────────────────────────────────────────────────────────────────
-ringFill.style.strokeDasharray = CIRCUMFERENCE;
-ringFill.style.strokeDashoffset = 0;
-timeDisplay.textContent = '00:00';
+init();

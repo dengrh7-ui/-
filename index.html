@@ -2,91 +2,205 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>计时器</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>记账本</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app">
-    <h1 class="app-title">计时器</h1>
 
-    <!-- Mode Tabs -->
-    <div class="tabs">
-      <button class="tab active" data-mode="countdown">倒计时</button>
-      <button class="tab" data-mode="stopwatch">秒表</button>
+  <!-- Fixed Header -->
+  <header class="header">
+    <div class="header-month">
+      <button class="month-nav" id="prevMonth">‹</button>
+      <span class="month-label" id="monthLabel"></span>
+      <button class="month-nav" id="nextMonth">›</button>
     </div>
-
-    <!-- Ring Display -->
-    <div class="ring-container">
-      <svg class="progress-ring" viewBox="0 0 220 220">
-        <circle class="ring-bg" cx="110" cy="110" r="95"/>
-        <circle class="ring-fill" cx="110" cy="110" r="95" id="ringFill"/>
-      </svg>
-      <div class="time-display" id="timeDisplay">00:00</div>
-      <div class="lap-badge" id="lapBadge"></div>
-    </div>
-
-    <!-- Countdown Input -->
-    <div class="input-section" id="countdownInput">
-      <div class="time-inputs">
-        <div class="input-group">
-          <button class="spin-btn" data-target="hours" data-dir="up">▲</button>
-          <input type="number" id="inputHours" min="0" max="23" value="0" placeholder="时">
-          <button class="spin-btn" data-target="hours" data-dir="down">▼</button>
-          <span class="input-label">时</span>
-        </div>
-        <span class="sep">:</span>
-        <div class="input-group">
-          <button class="spin-btn" data-target="minutes" data-dir="up">▲</button>
-          <input type="number" id="inputMinutes" min="0" max="59" value="5" placeholder="分">
-          <button class="spin-btn" data-target="minutes" data-dir="down">▼</button>
-          <span class="input-label">分</span>
-        </div>
-        <span class="sep">:</span>
-        <div class="input-group">
-          <button class="spin-btn" data-target="seconds" data-dir="up">▲</button>
-          <input type="number" id="inputSeconds" min="0" max="59" value="0" placeholder="秒">
-          <button class="spin-btn" data-target="seconds" data-dir="down">▼</button>
-          <span class="input-label">秒</span>
-        </div>
+    <div class="header-summary">
+      <div class="summary-item">
+        <span class="summary-label">支出</span>
+        <span class="summary-val expense" id="headerExpense">¥0.00</span>
       </div>
-      <!-- Presets -->
-      <div class="presets">
-        <button class="preset-btn" data-seconds="60">1分</button>
-        <button class="preset-btn" data-seconds="180">3分</button>
-        <button class="preset-btn" data-seconds="300">5分</button>
-        <button class="preset-btn" data-seconds="600">10分</button>
-        <button class="preset-btn" data-seconds="1500">25分</button>
-        <button class="preset-btn" data-seconds="3600">1时</button>
+      <div class="summary-div"></div>
+      <div class="summary-item">
+        <span class="summary-label">收入</span>
+        <span class="summary-val income" id="headerIncome">¥0.00</span>
+      </div>
+      <div class="summary-div"></div>
+      <div class="summary-item">
+        <span class="summary-label">结余</span>
+        <span class="summary-val" id="headerBalance">¥0.00</span>
       </div>
     </div>
+  </header>
 
-    <!-- Controls -->
-    <div class="controls">
-      <button class="ctrl-btn secondary" id="resetBtn">重置</button>
-      <button class="ctrl-btn primary" id="startBtn">开始</button>
-      <button class="ctrl-btn secondary" id="lapBtn" style="display:none">计次</button>
-    </div>
+  <!-- Pages -->
+  <main class="main">
 
-    <!-- Laps List (stopwatch) -->
-    <div class="laps-container" id="lapsContainer" style="display:none">
-      <div class="laps-header">
-        <span>计次</span>
-        <span>单圈</span>
-        <span>总计</span>
+    <!-- ── Records Page ── -->
+    <section class="page active" id="pageRecords">
+      <div class="filter-bar" id="filterBar">
+        <button class="filter-btn active" data-cat="all">全部</button>
+        <button class="filter-btn" data-cat="食">🍜 餐饮</button>
+        <button class="filter-btn" data-cat="衣">👕 服饰</button>
+        <button class="filter-btn" data-cat="住">🏠 住房</button>
+        <button class="filter-btn" data-cat="行">🚗 出行</button>
+        <button class="filter-btn" data-cat="娱">🎮 娱乐</button>
+        <button class="filter-btn" data-cat="医">💊 医疗</button>
+        <button class="filter-btn" data-cat="教育">📚 教育</button>
+        <button class="filter-btn" data-cat="其他">📦 其他</button>
       </div>
-      <ul class="laps-list" id="lapsList"></ul>
-    </div>
+      <div class="records-list" id="recordsList"></div>
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">📒</div>
+        <p>本月暂无记录</p>
+        <p class="empty-sub">点击下方 + 开始记账</p>
+      </div>
+    </section>
 
-    <!-- Finish overlay -->
-    <div class="finish-overlay" id="finishOverlay" style="display:none">
-      <div class="finish-card">
-        <div class="finish-icon">✓</div>
-        <p>时间到！</p>
-        <button class="ctrl-btn primary" id="dismissBtn">关闭</button>
+    <!-- ── Add Page ── -->
+    <section class="page" id="pageAdd">
+      <div class="add-form">
+        <div class="type-toggle">
+          <button class="type-btn active" data-type="expense">支出</button>
+          <button class="type-btn" data-type="income">收入</button>
+        </div>
+
+        <div class="amount-display">
+          <span class="amount-currency">¥</span>
+          <span class="amount-val" id="amountDisplay">0</span>
+        </div>
+
+        <!-- Expense categories -->
+        <div class="cat-grid" id="catExpense">
+          <button class="cat-btn" data-cat="食"><span class="ci">🍜</span><span class="cn">餐饮</span></button>
+          <button class="cat-btn" data-cat="衣"><span class="ci">👕</span><span class="cn">服饰</span></button>
+          <button class="cat-btn" data-cat="住"><span class="ci">🏠</span><span class="cn">住房</span></button>
+          <button class="cat-btn" data-cat="行"><span class="ci">🚗</span><span class="cn">出行</span></button>
+          <button class="cat-btn" data-cat="娱"><span class="ci">🎮</span><span class="cn">娱乐</span></button>
+          <button class="cat-btn" data-cat="医"><span class="ci">💊</span><span class="cn">医疗</span></button>
+          <button class="cat-btn" data-cat="教育"><span class="ci">📚</span><span class="cn">教育</span></button>
+          <button class="cat-btn" data-cat="其他"><span class="ci">📦</span><span class="cn">其他</span></button>
+        </div>
+
+        <!-- Income categories -->
+        <div class="cat-grid" id="catIncome" style="display:none">
+          <button class="cat-btn" data-cat="工资"><span class="ci">💼</span><span class="cn">工资</span></button>
+          <button class="cat-btn" data-cat="兼职"><span class="ci">💻</span><span class="cn">兼职</span></button>
+          <button class="cat-btn" data-cat="投资"><span class="ci">📈</span><span class="cn">投资</span></button>
+          <button class="cat-btn" data-cat="红包"><span class="ci">🧧</span><span class="cn">红包</span></button>
+          <button class="cat-btn" data-cat="转账"><span class="ci">🔄</span><span class="cn">转账</span></button>
+          <button class="cat-btn" data-cat="报销"><span class="ci">🧾</span><span class="cn">报销</span></button>
+          <button class="cat-btn" data-cat="理财"><span class="ci">💹</span><span class="cn">理财</span></button>
+          <button class="cat-btn" data-cat="其他收入"><span class="ci">💰</span><span class="cn">其他</span></button>
+        </div>
+
+        <div class="meta-row">
+          <input class="note-input" id="noteInput" type="text" placeholder="备注（可选）" maxlength="60">
+          <input class="date-input" id="dateInput" type="date">
+        </div>
+
+        <div class="numpad">
+          <button class="np" data-v="7">7</button>
+          <button class="np" data-v="8">8</button>
+          <button class="np" data-v="9">9</button>
+          <button class="np np-del" data-v="del">⌫</button>
+          <button class="np" data-v="4">4</button>
+          <button class="np" data-v="5">5</button>
+          <button class="np" data-v="6">6</button>
+          <button class="np np-ok" data-v="ok">完成</button>
+          <button class="np" data-v="1">1</button>
+          <button class="np" data-v="2">2</button>
+          <button class="np" data-v="3">3</button>
+          <button class="np" data-v="0">0</button>
+          <button class="np" data-v=".">.</button>
+          <button class="np" data-v="00">00</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Stats Page ── -->
+    <section class="page" id="pageStats">
+      <div class="stats-wrap">
+
+        <div class="scard">
+          <div class="scard-row">
+            <div class="scard-cell">
+              <span class="sc-label">本月支出</span>
+              <span class="sc-val expense" id="stExp">¥0.00</span>
+            </div>
+            <div class="scard-cell">
+              <span class="sc-label">本月收入</span>
+              <span class="sc-val income" id="stInc">¥0.00</span>
+            </div>
+            <div class="scard-cell">
+              <span class="sc-label">结余</span>
+              <span class="sc-val" id="stBal">¥0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="scard">
+          <div class="scard-title">支出分类</div>
+          <div class="pie-area">
+            <svg class="pie-svg" id="pieSvg" viewBox="0 0 200 200"></svg>
+            <div class="pie-legend" id="pieLegend"></div>
+          </div>
+        </div>
+
+        <div class="scard">
+          <div class="scard-title">分类明细</div>
+          <div id="catBreakdown"></div>
+        </div>
+
+        <div class="scard">
+          <div class="scard-title">本月日支出</div>
+          <div class="trend-wrap">
+            <svg id="trendSvg" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
+          </div>
+        </div>
+
+        <div class="scard">
+          <div class="scard-title">数据管理</div>
+          <div class="data-btns">
+            <button class="dbtn" id="exportBtn">📤 导出 JSON</button>
+            <button class="dbtn" id="importBtn">📥 导入 JSON</button>
+            <input type="file" id="importFile" accept=".json" style="display:none">
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="bnav active" data-page="pageRecords">
+      <span class="bnav-icon">📋</span>
+      <span class="bnav-label">明细</span>
+    </button>
+    <button class="bnav bnav-add" data-page="pageAdd">
+      <span class="bnav-plus">+</span>
+    </button>
+    <button class="bnav" data-page="pageStats">
+      <span class="bnav-icon">📊</span>
+      <span class="bnav-label">统计</span>
+    </button>
+  </nav>
+
+  <!-- Delete modal -->
+  <div class="overlay" id="delOverlay">
+    <div class="modal">
+      <p class="modal-msg">确认删除此记录？</p>
+      <div class="modal-btns">
+        <button class="mbtn mbtn-cancel" id="delCancel">取消</button>
+        <button class="mbtn mbtn-ok" id="delConfirm">删除</button>
       </div>
     </div>
   </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
 
   <script src="app.js"></script>
 </body>
