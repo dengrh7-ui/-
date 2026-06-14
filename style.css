@@ -278,10 +278,10 @@ html, body {
 
 /* ── Add form ────────────────────────────────────────────────────────── */
 .add-form {
-  padding: 14px 16px;
+  padding: 10px 16px 8px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   max-width: 480px;
   margin: 0 auto;
 }
@@ -314,9 +314,9 @@ html, body {
   justify-content: center;
   gap: 4px;
 }
-.amount-currency { font-size: 1.4rem; color: var(--text-m); }
+.amount-currency { font-size: 1.2rem; color: var(--text-m); }
 .amount-val {
-  font-size: 2.6rem;
+  font-size: 2.2rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   border-bottom: 2px solid var(--accent);
@@ -332,11 +332,11 @@ html, body {
 }
 .cat-btn {
   display: flex; flex-direction: column;
-  align-items: center; gap: 4px;
+  align-items: center; gap: 3px;
   background: var(--surface);
   border: 1px solid var(--border2);
-  border-radius: 12px;
-  padding: 10px 4px;
+  border-radius: 10px;
+  padding: 7px 4px;
   cursor: pointer;
   transition: all .2s;
 }
@@ -346,8 +346,8 @@ html, body {
   background: rgba(108,99,255,.15);
   box-shadow: 0 0 0 2px rgba(108,99,255,.25);
 }
-.ci { font-size: 1.4rem; }
-.cn { font-size: 0.7rem; color: var(--text-m); }
+.ci { font-size: 1.25rem; }
+.cn { font-size: 0.66rem; color: var(--text-m); }
 
 .meta-row { display: flex; gap: 8px; }
 
@@ -356,14 +356,14 @@ html, body {
   border: 1px solid var(--border2);
   border-radius: 10px;
   color: var(--text);
-  padding: 9px 12px;
-  font-size: .88rem;
+  padding: 7px 12px;
+  font-size: .84rem;
   outline: none;
   transition: border-color .2s;
   font-family: inherit;
 }
 .note-input { flex: 1; }
-.date-input { width: 138px; flex-shrink: 0; }
+.date-input { width: 132px; flex-shrink: 0; }
 .note-input:focus, .date-input:focus { border-color: var(--accent); }
 .note-input::placeholder { color: var(--text-d); }
 .date-input::-webkit-calendar-picker-indicator { filter: invert(.6); cursor: pointer; }
@@ -372,8 +372,8 @@ html, body {
 .numpad {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 54px);
-  gap: 6px;
+  grid-template-rows: repeat(4, 48px);
+  gap: 5px;
 }
 .np {
   background: var(--surface);
