@@ -348,6 +348,17 @@ function switchPage(id) {
   if (id === 'pageStats')   { renderStats(); }
 }
 
+// ── Keyboard support (desktop) ────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (S.page !== 'pageAdd') return;
+  const active = document.activeElement;
+  if (active === $('noteInput') || active === $('dateInput')) return;
+  if ('0123456789'.includes(e.key)) { e.preventDefault(); handleKey(e.key); }
+  else if (e.key === '.')           { e.preventDefault(); handleKey('.'); }
+  else if (e.key === 'Backspace')   { e.preventDefault(); handleKey('del'); }
+  else if (e.key === 'Enter')       { e.preventDefault(); handleKey('ok'); }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 function init() {
   $('dateInput').value = todayStr();
